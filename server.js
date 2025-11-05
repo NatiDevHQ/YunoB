@@ -1,16 +1,14 @@
-import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
-import helmet from "helmet";
 import path from "path";
 import { fileURLToPath } from "url";
 import { initDB } from "./config/db.js";
 import rateLimiter from "./middleware/rateLimiter.js";
 
-// Import routes - keeping auth, admin, and user subscription
+// Import routes
 import adminSubscriptionRoute from "./routes/adminSubscriptionRoute.js";
 import authRoute from "./routes/authRoute.js";
-import subscriptionRoute from "./routes/subscriptionRoute.js"; // Added back user subscription
+import subscriptionRoute from "./routes/subscriptionRoute.js";
 
 dotenv.config();
 const app = express();
@@ -18,73 +16,6 @@ const app = express();
 // Path setup for serving admin dashboard
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Security middleware
-app.use(
-  helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
-        fontSrc: ["'self'", "https://cdnjs.cloudflare.com"],
-        imgSrc: ["'self'", "data:", "https:"],
-      },
-    },
-  })
-);
-
-// Expanded CORS configuration
-const allowedOrigins = [
-  "http://localhost:8081",
-  "http://localhost:3000",
-  "http://localhost:5001",
-  "exp://localhost:8081",
-  "exp://127.0.0.1:8081",
-  "exp://*.exp.host",
-  "exp://*.expo.dev",
-  "https://*.exp.host",
-  "https://*.expo.dev",
-  /\.exp\.host$/,
-  /\.expo\.dev$/,
-];
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl requests)
-      if (!origin) return callback(null, true);
-
-      if (
-        allowedOrigins.some((pattern) => {
-          if (pattern instanceof RegExp) {
-            return pattern.test(origin);
-          }
-          return pattern === origin;
-        })
-      ) {
-        return callback(null, true);
-      }
-
-      console.log("CORS blocked for origin:", origin);
-      return callback(new Error("CORS policy: Origin not allowed"));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "Origin",
-      "Accept",
-      "X-Requested-With",
-      "admin-token",
-    ],
-  })
-);
-
-// Handle preflight requests
-app.options("*", cors());
 
 // Rate limiting & JSON parsing
 app.use(rateLimiter);
@@ -158,18 +89,17 @@ app.get("/", (req, res) => {
       health: "/api/health",
       admin_health: "/api/admin/health",
       admin_dashboard: "/admin",
-      auth: "/api/auth",
-      subscription: "/api/subscription", // Added back
+      subscription: "/api/subscription",
       admin_subscription: "/api/admin/subscription",
     },
   });
 });
 
 /* =========================
-   API Routes - AUTH, USER SUBSCRIPTION, AND ADMIN
+   API Routes
    ========================= */
 app.use("/api/auth", authRoute);
-app.use("/api/subscription", subscriptionRoute); // Added back user subscription
+app.use("/api/subscription", subscriptionRoute);
 app.use("/api/admin/subscription", adminSubscriptionRoute);
 
 /* =========================
@@ -192,7 +122,7 @@ app.post("/api/setup-database", async (req, res) => {
 });
 
 /* =========================
-   Serve Admin Dashboard - MUST COME AFTER API ROUTES
+   Serve Admin Dashboard
    ========================= */
 app.use("/admin", express.static(path.join(__dirname, "admin")));
 
@@ -216,28 +146,24 @@ adminRoutes.forEach((route) => {
 });
 
 /* =========================
-   404 Handler for API Routes
+   Simple 404 Handler
    ========================= */
-app.use("/api/*", (req, res) => {
-  res.status(404).json({
-    error: "API endpoint not found",
-    path: req.originalUrl,
-    method: req.method,
-    timestamp: new Date().toISOString(),
-    available_endpoints: [
-      "/api/health",
-      "/api/auth",
-      "/api/subscription", // Added back
-      "/api/admin/subscription",
-    ],
-  });
-});
-
-/* =========================
-   Catch-all for Admin Dashboard (SPA routing)
-   ========================= */
-app.get("/admin/*", (req, res) => {
-  res.sendFile(path.join(__dirname, "admin", "dashboard.html"));
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({
+      error: "API endpoint not found",
+      path: req.originalUrl,
+      method: req.method,
+      timestamp: new Date().toISOString(),
+      available_endpoints: [
+        "/api/health",
+        "/api/auth",
+        "/api/subscription",
+        "/api/admin/subscription",
+      ],
+    });
+  }
+  next();
 });
 
 /* =========================
@@ -250,18 +176,6 @@ app.use((err, req, res, next) => {
     return res.status(401).json({
       error: "Authentication required",
       message: "Valid authentication token required",
-      timestamp: new Date().toISOString(),
-    });
-  }
-  next(err);
-});
-
-// CORS Error Handler
-app.use((err, req, res, next) => {
-  if (err.message === "CORS policy: Origin not allowed") {
-    return res.status(403).json({
-      error: "CORS Error",
-      message: "Origin not allowed",
       timestamp: new Date().toISOString(),
     });
   }
@@ -344,8 +258,8 @@ const startServer = async () => {
       console.log("=".repeat(60));
       console.log("📊 Available Endpoints:");
       console.log("  • /api/health - Service health check");
-      console.log("  • /api/auth - User authentication");
-      console.log("  • /api/subscription - User subscription management"); // Added back
+      console.log("  • /api/auth - Authentication routes");
+      console.log("  • /api/subscription - User subscription management");
       console.log(
         "  • /api/admin/subscription - Admin subscription management"
       );

@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ElectroPOS Admin Dashboard</title>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      :root {
+        --primary: #3b82f6;
+        --primary-dark: #1d4ed8;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --dark: #1f2937;
+        --light: #f9fafb;
+        --gray: #6b7280;
+        --border: #e5e7eb;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #f3f4f6;
+        color: var(--dark);
+      }
+
+      .dashboard {
+        display: flex;
+        min-height: 100vh;
+      }
+
+      /* Sidebar */
+      .sidebar {
+        width: 250px;
+        background: var(--dark);
+        color: white;
+        position: fixed;
+        height: 100vh;
+        overflow-y: auto;
+        transition: all 0.3s;
+      }
+
+      .sidebar-header {
+        padding: 20px;
+        border-bottom: 1px solid #374151;
+      }
+
+      .sidebar-header h2 {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 1.5rem;
+      }
+
+      .sidebar-menu {
+        padding: 20px 0;
+      }
+
+      .menu-item {
+        padding: 12px 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        text-decoration: none;
+        color: #d1d5db;
+        transition: all 0.3s;
+        border-left: 3px solid transparent;
+        cursor: pointer;
+      }
+
+      .menu-item:hover,
+      .menu-item.active {
+        background: #374151;
+        color: white;
+        border-left-color: var(--primary);
+      }
+
+      .menu-item i {
+        width: 20px;
+        text-align: center;
+      }
+
+      /* Main Content */
+      .main-content {
+        flex: 1;
+        margin-left: 250px;
+        padding: 20px;
+      }
+
+      .header {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+
+      .stat-card {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        border-left: 4px solid var(--primary);
+      }
+
+      .stat-card.revenue {
+        border-left-color: var(--success);
+      }
+      .stat-card.pending {
+        border-left-color: var(--warning);
+      }
+      .stat-card.active {
+        border-left-color: var(--primary);
+      }
+      .stat-card.recent {
+        border-left-color: var(--danger);
+      }
+
+      .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        margin: 10px 0;
+      }
+
+      .stat-title {
+        color: var(--gray);
+        font-size: 0.9rem;
+      }
+
+      .card {
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+        overflow: hidden;
+      }
+
+      .card-header {
+        padding: 20px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .card-title {
+        font-size: 1.2rem;
+        font-weight: 600;
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .table th,
+      .table td {
+        padding: 12px 15px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .table th {
+        background: #f9fafb;
+        font-weight: 600;
+        color: var(--gray);
+      }
+
+      .badge {
+        padding: 4px 8px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+      }
+
+      .badge-pending {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .badge-approved {
+        background: #d1fae5;
+        color: #065f46;
+      }
+      .badge-rejected {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      .badge-active {
+        background: #dbeafe;
+        color: #1e40af;
+      }
+      .badge-expired {
+        background: #f3f4f6;
+        color: #6b7280;
+      }
+
+      .btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.3s;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.9rem;
+      }
+
+      .btn-sm {
+        padding: 6px 12px;
+        font-size: 0.8rem;
+      }
+      .btn-primary {
+        background: var(--primary);
+        color: white;
+      }
+      .btn-success {
+        background: var(--success);
+        color: white;
+      }
+      .btn-danger {
+        background: var(--danger);
+        color: white;
+      }
+      .btn-warning {
+        background: var(--warning);
+        color: white;
+      }
+
+      .btn:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+      }
+
+      .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal-content {
+        background: white;
+        border-radius: 10px;
+        width: 90%;
+        max-width: 500px;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+
+      .modal-header {
+        padding: 20px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .modal-body {
+        padding: 20px;
+      }
+      .modal-footer {
+        padding: 20px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
+      .form-group {
+        margin-bottom: 15px;
+      }
+      .form-label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+      }
+      .form-control {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 1rem;
+      }
+
+      textarea.form-control {
+        min-height: 80px;
+        resize: vertical;
+      }
+
+      .login-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      }
+
+      .login-card {
+        background: white;
+        padding: 40px;
+        border-radius: 15px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: 400px;
+      }
+
+      .search-box {
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        width: 300px;
+      }
+
+      .action-buttons {
+        display: flex;
+        gap: 5px;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 20px;
+        color: var(--gray);
+      }
+
+      .error-message {
+        background: #fee2e2;
+        color: #991b1b;
+        padding: 10px;
+        border-radius: 6px;
+        margin: 10px 0;
+      }
+
+      .success-message {
+        background: #d1fae5;
+        color: #065f46;
+        padding: 10px;
+        border-radius: 6px;
+        margin: 10px 0;
+      }
+
+      .retry-button {
+        margin-top: 10px;
+      }
+
+      /* Modal close button */
+      .modal-header button {
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: var(--gray);
+      }
+
+      .modal-header button:hover {
+        color: var(--dark);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-container">
+      <div class="login-card">
+        <h2 style="text-align: center; margin-bottom: 30px">Admin Login</h2>
+        <form id="loginForm">
+          <div class="form-group">
+            <label class="form-label">Admin Token</label>
+            <input
+              type="password"
+              id="adminToken"
+              class="form-control"
+              placeholder="Enter admin token"
+              required
+            />
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%">
+            Login
+          </button>
+        </form>
+        <div
+          id="loginError"
+          class="error-message"
+          style="display: none; margin-top: 15px"
+        ></div>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="dashboard" style="display: none">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-header">
+          <h2><i class="fas fa-store"></i> ElectroPOS Admin</h2>
+        </div>
+        <div class="sidebar-menu">
+          <a class="menu-item active" data-tab="dashboard-tab">
+            <i class="fas fa-tachometer-alt"></i> Dashboard
+          </a>
+          <a class="menu-item" data-tab="payments-tab">
+            <i class="fas fa-money-bill-wave"></i> Pending Payments
+          </a>
+          <a class="menu-item" data-tab="subscriptions-tab">
+            <i class="fas fa-users"></i> Subscriptions
+          </a>
+          <a class="menu-item" id="setupDbBtn">
+            <i class="fas fa-database"></i> Setup Database
+          </a>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="main-content">
+        <!-- Header -->
+        <div class="header">
+          <h1>Admin Dashboard</h1>
+          <button id="logoutBtn" class="btn btn-danger">
+            <i class="fas fa-sign-out-alt"></i> Logout
+          </button>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard-tab" class="tab-content">
+          <!-- Stats Grid -->
+          <div class="stats-grid">
+            <div class="stat-card revenue">
+              <div class="stat-title">Total Revenue</div>
+              <div class="stat-number">
+                ETB <span id="totalRevenue">0</span>
+              </div>
+              <div class="stat-desc">All approved payments</div>
+            </div>
+            <div class="stat-card active">
+              <div class="stat-title">Active Subscriptions</div>
+              <div class="stat-number" id="activeSubscriptions">0</div>
+              <div class="stat-desc">Currently active users</div>
+            </div>
+            <div class="stat-card pending">
+              <div class="stat-title">Pending Payments</div>
+              <div class="stat-number" id="pendingPayments">0</div>
+              <div class="stat-desc">Awaiting approval</div>
+            </div>
+            <div class="stat-card recent">
+              <div class="stat-title">Recent Payments (7d)</div>
+              <div class="stat-number" id="recentPayments">0</div>
+              <div class="stat-desc">Last 7 days</div>
+            </div>
+          </div>
+
+          <!-- Recent Activity -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Recent Payment Activity</h3>
+            </div>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Plan</th>
+                    <th>Amount</th>
+                    <th>Method</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody id="recentActivityTable">
+                  <tr>
+                    <td colspan="6" class="loading">
+                      Loading recent activity...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pending Payments Tab -->
+        <div id="payments-tab" class="tab-content" style="display: none">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Pending Payment Verification</h3>
+              <div>
+                <button class="btn btn-primary" id="refreshPaymentsBtn">
+                  <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Email</th>
+                    <th>Plan</th>
+                    <th>Amount</th>
+                    <th>Method</th>
+                    <th>Transaction Code</th>
+                    <th>Submitted</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="pendingPaymentsTable">
+                  <tr>
+                    <td colspan="8" class="loading">
+                      Loading pending payments...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subscriptions Tab -->
+        <div id="subscriptions-tab" class="tab-content" style="display: none">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">All Subscriptions</h3>
+              <div>
+                <button class="btn btn-primary" id="refreshSubscriptionsBtn">
+                  <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Email</th>
+                    <th>Plan</th>
+                    <th>Status</th>
+                    <th>Start Date</th>
+                    <th>End Date</th>
+                    <th>Days Left</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="subscriptionsTable">
+                  <tr>
+                    <td colspan="8" class="loading">
+                      Loading subscriptions...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modals -->
+    <!-- Payment Verification Modal -->
+    <div id="paymentModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Verify Payment</h3>
+          <button type="button" id="closePaymentModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="paymentDetails">
+            <!-- Payment details will be filled here -->
+          </div>
+          <div class="form-group">
+            <label class="form-label">Admin Notes</label>
+            <textarea
+              id="adminNotes"
+              class="form-control"
+              rows="3"
+              placeholder="Add any notes about this verification..."
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-danger" id="rejectPaymentBtn">Reject</button>
+          <button class="btn btn-success" id="approvePaymentBtn">
+            Approve
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rejection Reason Modal -->
+    <div id="rejectModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Reject Payment</h3>
+          <button type="button" id="closeRejectModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Rejection Reason *</label>
+            <textarea
+              id="rejectionReason"
+              class="form-control"
+              rows="3"
+              placeholder="Explain why this payment is being rejected..."
+              required
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" id="cancelRejectBtn">Cancel</button>
+          <button class="btn btn-danger" id="confirmRejectionBtn">
+            Confirm Rejection
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let currentPaymentId = null;
+      let adminToken = "";
+
+      // API Base URL
+      const API_BASE = window.location.origin + "/api/admin/subscription";
+
+      console.log("API Base URL:", API_BASE);
+
+      // Initialize all event listeners
+      function initializeEventListeners() {
+        console.log("Initializing event listeners...");
+
+        // Tab Management
+        document.querySelectorAll(".menu-item").forEach((item) => {
+          item.addEventListener("click", function (e) {
+            e.preventDefault();
+
+            // Update active menu item
+            document
+              .querySelectorAll(".menu-item")
+              .forEach((i) => i.classList.remove("active"));
+            this.classList.add("active");
+
+            // Show selected tab
+            const tabId = this.getAttribute("data-tab");
+            if (tabId) {
+              document
+                .querySelectorAll(".tab-content")
+                .forEach((tab) => (tab.style.display = "none"));
+              document.getElementById(tabId).style.display = "block";
+
+              // Load tab data
+              if (tabId === "dashboard-tab") loadDashboard();
+              else if (tabId === "payments-tab") loadPendingPayments();
+              else if (tabId === "subscriptions-tab") loadSubscriptions();
+            }
+          });
+        });
+
+        // Refresh buttons
+        document
+          .getElementById("refreshPaymentsBtn")
+          .addEventListener("click", loadPendingPayments);
+        document
+          .getElementById("refreshSubscriptionsBtn")
+          .addEventListener("click", loadSubscriptions);
+
+        // Setup database button
+        document
+          .getElementById("setupDbBtn")
+          .addEventListener("click", setupDatabase);
+
+        // Modal buttons
+        document
+          .getElementById("closePaymentModal")
+          .addEventListener("click", () => closeModal("paymentModal"));
+        document
+          .getElementById("closeRejectModal")
+          .addEventListener("click", () => closeModal("rejectModal"));
+        document
+          .getElementById("cancelRejectBtn")
+          .addEventListener("click", () => closeModal("rejectModal"));
+
+        // Payment action buttons
+        document
+          .getElementById("approvePaymentBtn")
+          .addEventListener("click", approvePayment);
+        document
+          .getElementById("rejectPaymentBtn")
+          .addEventListener("click", rejectPayment);
+        document
+          .getElementById("confirmRejectionBtn")
+          .addEventListener("click", confirmRejection);
+
+        // Modal backdrop clicks
+        document.querySelectorAll(".modal").forEach((modal) => {
+          modal.addEventListener("click", function (e) {
+            if (e.target === this) {
+              closeModal(this.id);
+            }
+          });
+        });
+
+        console.log("Event listeners initialized successfully");
+      }
+
+      // Login Functionality
+      document
+        .getElementById("loginForm")
+        .addEventListener("submit", async function (e) {
+          e.preventDefault();
+          const token = document.getElementById("adminToken").value;
+          const errorDiv = document.getElementById("loginError");
+
+          try {
+            console.log("Attempting login with token...");
+            // Verify token by making a test request
+            const response = await fetch(`${API_BASE}/dashboard-stats`, {
+              headers: {
+                "admin-token": token,
+              },
+            });
+
+            console.log("Login response status:", response.status);
+
+            if (response.ok) {
+              adminToken = token;
+              localStorage.setItem("adminToken", token);
+              document.getElementById("loginScreen").style.display = "none";
+              document.getElementById("dashboard").style.display = "flex";
+
+              // Initialize event listeners after login
+              initializeEventListeners();
+              loadDashboard();
+              errorDiv.style.display = "none";
+              console.log("Login successful");
+            } else {
+              const error = await response
+                .json()
+                .catch(() => ({ error: "Invalid response from server" }));
+              errorDiv.textContent = error.error || "Invalid admin token";
+              errorDiv.style.display = "block";
+              console.error("Login failed:", error);
+            }
+          } catch (error) {
+            errorDiv.textContent = "Login failed: " + error.message;
+            errorDiv.style.display = "block";
+            console.error("Login error:", error);
+          }
+        });
+
+      // Logout
+      document
+        .getElementById("logoutBtn")
+        .addEventListener("click", function () {
+          adminToken = "";
+          localStorage.removeItem("adminToken");
+          document.getElementById("dashboard").style.display = "none";
+          document.getElementById("loginScreen").style.display = "flex";
+          document.getElementById("adminToken").value = "";
+        });
+
+      // Modal Functions
+      function openModal(modalId) {
+        console.log("Opening modal:", modalId);
+        document.getElementById(modalId).style.display = "flex";
+      }
+
+      function closeModal(modalId) {
+        console.log("Closing modal:", modalId);
+        document.getElementById(modalId).style.display = "none";
+      }
+
+      // Enhanced API Helper Function
+      async function apiCall(endpoint, options = {}) {
+        try {
+          const url = `${API_BASE}${endpoint}`;
+          console.log("Making API call to:", url);
+
+          const config = {
+            headers: {
+              "Content-Type": "application/json",
+              "admin-token": adminToken,
+              ...options.headers,
+            },
+            ...options,
+          };
+
+          if (config.body && typeof config.body === "object") {
+            config.body = JSON.stringify(config.body);
+          }
+
+          // Add timeout to prevent hanging requests
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+          config.signal = controller.signal;
+
+          const response = await fetch(url, config);
+          clearTimeout(timeoutId);
+
+          console.log("API Response status:", response.status);
+
+          if (!response.ok) {
+            let errorMessage = `HTTP error! status: ${response.status}`;
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.error || errorMessage;
+            } catch (e) {
+              errorMessage = response.statusText || errorMessage;
+            }
+            throw new Error(errorMessage);
+          }
+
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            return await response.json();
+          } else {
+            return { success: true };
+          }
+        } catch (error) {
+          console.error("API call failed:", error);
+          if (error.name === "AbortError") {
+            throw new Error(
+              "Request timeout - please check your internet connection and try again"
+            );
+          }
+          if (error.message.includes("Failed to fetch")) {
+            throw new Error(
+              "Network error - please check your internet connection"
+            );
+          }
+          throw error;
+        }
+      }
+
+      // Load Dashboard Data
+      async function loadDashboard() {
+        console.log("Loading dashboard data...");
+        try {
+          const [stats, payments] = await Promise.all([
+            apiCall("/dashboard-stats").catch((error) => {
+              console.error("Error loading stats:", error);
+              return {
+                total_revenue: 0,
+                active_subscriptions: 0,
+                pending_payments: 0,
+                recent_payments: 0,
+              };
+            }),
+            apiCall("/pending-payments").catch((error) => {
+              console.error("Error loading payments:", error);
+              return [];
+            }),
+          ]);
+
+          // Update stats with fallback values
+          document.getElementById("totalRevenue").textContent =
+            stats.total_revenue ? stats.total_revenue.toFixed(2) : "0.00";
+          document.getElementById("activeSubscriptions").textContent =
+            stats.active_subscriptions || "0";
+          document.getElementById("pendingPayments").textContent =
+            stats.pending_payments || "0";
+          document.getElementById("recentPayments").textContent =
+            stats.recent_payments || "0";
+
+          // Update recent activity
+          updateRecentActivityTable(payments.slice(0, 5));
+        } catch (error) {
+          console.error("Error loading dashboard:", error);
+          showError(
+            "recentActivityTable",
+            "Failed to load dashboard data: " + error.message
+          );
+        }
+      }
+
+      function updateRecentActivityTable(payments) {
+        const tbody = document.getElementById("recentActivityTable");
+
+        if (!payments || payments.length === 0) {
+          tbody.innerHTML =
+            '<tr><td colspan="6" style="text-align: center; color: var(--gray);">No recent payments</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = payments
+          .map(
+            (payment) => `
+                <tr>
+                    <td>${payment.user_name || "N/A"}</td>
+                    <td>${payment.plan_name}</td>
+                    <td>ETB ${payment.amount}</td>
+                    <td>${payment.payment_method}</td>
+                    <td><span class="badge badge-pending">Pending</span></td>
+                    <td>${new Date(
+                      payment.submitted_at
+                    ).toLocaleDateString()}</td>
+                </tr>
+            `
+          )
+          .join("");
+      }
+
+      // Load Pending Payments with Enhanced Error Handling
+      async function loadPendingPayments() {
+        console.log("Loading pending payments...");
+        const tbody = document.getElementById("pendingPaymentsTable");
+
+        try {
+          tbody.innerHTML =
+            '<tr><td colspan="8" class="loading">Loading pending payments...</td></tr>';
+
+          const payments = await apiCall("/pending-payments");
+          updatePendingPaymentsTable(payments);
+        } catch (error) {
+          console.error("Error loading pending payments:", error);
+
+          let errorMessage =
+            "Failed to load pending payments: " + error.message;
+
+          // Specific handling for different error types
+          if (
+            error.message.includes("timeout") ||
+            error.message.includes("Network error")
+          ) {
+            errorMessage =
+              "Network connection issue. Please check your internet connection and try again.";
+          } else if (error.message.includes("database")) {
+            errorMessage =
+              "Database connection issue. Please try again in a moment.";
+          }
+
+          tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" style="text-align: center; padding: 20px;">
+                            <div class="error-message" style="margin-bottom: 15px;">
+                                ${errorMessage}
+                            </div>
+                            <button class="btn btn-primary retry-button" onclick="loadPendingPayments()">
+                                <i class="fas fa-sync-alt"></i> Retry
+                            </button>
+                        </td>
+                    </tr>
+                `;
+        }
+      }
+
+      function updatePendingPaymentsTable(payments) {
+        const tbody = document.getElementById("pendingPaymentsTable");
+
+        if (!payments || payments.length === 0) {
+          tbody.innerHTML =
+            '<tr><td colspan="8" style="text-align: center; color: var(--gray);">No pending payments</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = payments
+          .map(
+            (payment) => `
+                <tr>
+                    <td>${payment.user_name || "N/A"}</td>
+                    <td>${payment.user_email}</td>
+                    <td>${payment.plan_name}</td>
+                    <td>ETB ${payment.amount}</td>
+                    <td>${payment.payment_method}</td>
+                    <td><code>${payment.transaction_code}</code></td>
+                    <td>${new Date(
+                      payment.submitted_at
+                    ).toLocaleDateString()}</td>
+                    <td class="action-buttons">
+                        <button class="btn btn-sm btn-primary verify-btn" data-payment-id="${
+                          payment.id
+                        }">
+                            <i class="fas fa-check"></i> Verify
+                        </button>
+                    </td>
+                </tr>
+            `
+          )
+          .join("");
+
+        // Add event listeners to all verify buttons
+        document.querySelectorAll(".verify-btn").forEach((button) => {
+          button.addEventListener("click", function () {
+            const paymentId = this.getAttribute("data-payment-id");
+            verifyPayment(parseInt(paymentId));
+          });
+        });
+      }
+
+      // Enhanced Payment Verification
+      async function verifyPayment(paymentId) {
+        console.log("Verifying payment:", paymentId);
+
+        try {
+          const payments = await apiCall("/pending-payments");
+          const payment = payments.find((p) => p.id === paymentId);
+
+          if (payment) {
+            document.getElementById("paymentDetails").innerHTML = `
+                        <div style="margin-bottom: 15px;">
+                            <strong>User:</strong> ${
+                              payment.user_name || "N/A"
+                            } (${payment.user_email})<br>
+                            <strong>Plan:</strong> ${payment.plan_name}<br>
+                            <strong>Amount:</strong> ETB ${payment.amount}<br>
+                            <strong>Payment Method:</strong> ${
+                              payment.payment_method
+                            }<br>
+                            <strong>Transaction Code:</strong> <code>${
+                              payment.transaction_code
+                            }</code><br>
+                            <strong>Submitted:</strong> ${new Date(
+                              payment.submitted_at
+                            ).toLocaleString()}
+                        </div>
+                    `;
+            currentPaymentId = paymentId;
+            document.getElementById("adminNotes").value = "";
+            openModal("paymentModal");
+          } else {
+            alert("Payment not found! It may have been already processed.");
+            loadPendingPayments(); // Refresh the list
+          }
+        } catch (error) {
+          console.error("Error loading payment details:", error);
+          alert("Error loading payment details: " + error.message);
+        }
+      }
+
+      async function approvePayment() {
+        if (!currentPaymentId) {
+          alert("No payment selected!");
+          return;
+        }
+
+        console.log("Approving payment:", currentPaymentId);
+
+        try {
+          const adminNotes = document.getElementById("adminNotes").value;
+          await apiCall(`/approve-payment/${currentPaymentId}`, {
+            method: "POST",
+            body: { admin_notes: adminNotes },
+          });
+
+          alert("Payment approved successfully!");
+          closeModal("paymentModal");
+          loadDashboard();
+          loadPendingPayments();
+          currentPaymentId = null;
+        } catch (error) {
+          console.error("Error approving payment:", error);
+          alert("Error approving payment: " + error.message);
+        }
+      }
+
+      function rejectPayment() {
+        if (!currentPaymentId) {
+          alert("No payment selected!");
+          return;
+        }
+        closeModal("paymentModal");
+        document.getElementById("rejectionReason").value = "";
+        openModal("rejectModal");
+      }
+
+      async function confirmRejection() {
+        if (!currentPaymentId) {
+          alert("No payment selected!");
+          return;
+        }
+
+        const rejectionReason =
+          document.getElementById("rejectionReason").value;
+        if (!rejectionReason.trim()) {
+          alert("Please provide a rejection reason");
+          return;
+        }
+
+        console.log("Rejecting payment:", currentPaymentId);
+
+        try {
+          await apiCall(`/reject-payment/${currentPaymentId}`, {
+            method: "POST",
+            body: { rejection_reason: rejectionReason },
+          });
+
+          alert("Payment rejected successfully!");
+          closeModal("rejectModal");
+          loadDashboard();
+          loadPendingPayments();
+          currentPaymentId = null;
+        } catch (error) {
+          console.error("Error rejecting payment:", error);
+          alert("Error rejecting payment: " + error.message);
+        }
+      }
+
+      // Load Subscriptions
+      async function loadSubscriptions() {
+        console.log("Loading subscriptions...");
+        try {
+          const subscriptions = await apiCall("/subscriptions");
+          updateSubscriptionsTable(subscriptions);
+        } catch (error) {
+          console.error("Error loading subscriptions:", error);
+          showError(
+            "subscriptionsTable",
+            "Failed to load subscriptions: " + error.message
+          );
+        }
+      }
+
+      function updateSubscriptionsTable(subscriptions) {
+        const tbody = document.getElementById("subscriptionsTable");
+
+        if (!subscriptions || subscriptions.length === 0) {
+          tbody.innerHTML =
+            '<tr><td colspan="8" style="text-align: center; color: var(--gray);">No subscriptions found</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = subscriptions
+          .map((sub) => {
+            const endDate = new Date(sub.end_date);
+            const daysLeft = Math.ceil(
+              (endDate - new Date()) / (1000 * 60 * 60 * 24)
+            );
+            const isActive = daysLeft > 0 && sub.status === "active";
+            const status = isActive ? "active" : "expired";
+
+            return `
+                    <tr>
+                        <td>${sub.user_name || "N/A"}</td>
+                        <td>${sub.user_email}</td>
+                        <td>${sub.plan_name}</td>
+                        <td><span class="badge badge-${status}">${
+              status.charAt(0).toUpperCase() + status.slice(1)
+            }</span></td>
+                        <td>${new Date(
+                          sub.start_date
+                        ).toLocaleDateString()}</td>
+                        <td>${endDate.toLocaleDateString()}</td>
+                        <td>${isActive ? daysLeft : 0}</td>
+                        <td class="action-buttons">
+                            ${
+                              isActive
+                                ? `
+                                <button class="btn btn-sm btn-danger cancel-subscription-btn" data-user-id="${sub.user_id}">
+                                    <i class="fas fa-times"></i> Cancel
+                                </button>
+                            `
+                                : ""
+                            }
+                        </td>
+                    </tr>
+                `;
+          })
+          .join("");
+
+        // Add event listeners to cancel subscription buttons
+        document
+          .querySelectorAll(".cancel-subscription-btn")
+          .forEach((button) => {
+            button.addEventListener("click", function () {
+              const userId = this.getAttribute("data-user-id");
+              cancelSubscription(userId);
+            });
+          });
+      }
+
+      async function cancelSubscription(userId) {
+        if (confirm("Are you sure you want to cancel this subscription?")) {
+          console.log("Cancelling subscription for user:", userId);
+          try {
+            await apiCall(`/cancel-subscription/${userId}`, {
+              method: "POST",
+            });
+
+            alert("Subscription cancelled successfully!");
+            loadSubscriptions();
+          } catch (error) {
+            console.error("Error cancelling subscription:", error);
+            alert("Error cancelling subscription: " + error.message);
+          }
+        }
+      }
+
+      // Database Setup
+      async function setupDatabase() {
+        if (
+          confirm("This will create the necessary database tables. Continue?")
+        ) {
+          console.log("Setting up database...");
+          try {
+            await apiCall("/setup-database", {
+              method: "POST",
+            });
+            alert("Database setup completed successfully!");
+            loadDashboard();
+          } catch (error) {
+            console.error("Error setting up database:", error);
+            alert("Error setting up database: " + error.message);
+          }
+        }
+      }
+
+      // Utility Functions
+      function showError(elementId, message) {
+        const element = document.getElementById(elementId);
+        element.innerHTML = `<tr><td colspan="8" class="error-message">${message}</td></tr>`;
+      }
+
+      // Initialize dashboard when page loads
+      document.addEventListener("DOMContentLoaded", function () {
+        console.log("Dashboard initialized");
+
+        // Initialize event listeners for static elements
+        initializeEventListeners();
+
+        // Check if already logged in
+        const savedToken = localStorage.getItem("adminToken");
+        if (savedToken) {
+          adminToken = savedToken;
+          document.getElementById("loginScreen").style.display = "none";
+          document.getElementById("dashboard").style.display = "flex";
+          loadDashboard();
+        }
+      });
+    </script>
+  </body>
+</html>

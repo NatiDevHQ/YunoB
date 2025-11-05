@@ -7,7 +7,6 @@ const router = express.Router();
 router.get("/check", ClerkExpressRequireAuth(), (req, res) => {
   res.json({
     authenticated: true,
-    service: "Yuno App Auth API",
     user: {
       id: req.auth.userId,
       email: req.auth.sessionClaims?.email,
@@ -15,26 +14,12 @@ router.get("/check", ClerkExpressRequireAuth(), (req, res) => {
   });
 });
 
-// Get user profile
+// Get user profile (if needed)
 router.get("/profile", ClerkExpressRequireAuth(), (req, res) => {
   res.json({
-    service: "Yuno App Auth API",
     user_id: req.auth.userId,
     email: req.auth.sessionClaims?.email,
     name: req.auth.sessionClaims?.name,
-  });
-});
-
-// Health check
-router.get("/health", (req, res) => {
-  res.json({
-    status: "healthy",
-    service: "Yuno App Auth API",
-    timestamp: new Date().toISOString(),
-    features: {
-      clerk_integration: true,
-      user_authentication: true,
-    },
   });
 });
 

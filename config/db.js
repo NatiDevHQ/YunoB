@@ -16,12 +16,9 @@ const createConnection = () => {
 // Initialize connection
 try {
   sql = createConnection();
-  console.log("✅ Yuno App - Database connection initialized");
+  console.log("✅ Database connection initialized");
 } catch (error) {
-  console.error(
-    "❌ Yuno App - Failed to initialize database connection:",
-    error.message
-  );
+  console.error("❌ Failed to initialize database connection:", error.message);
   sql = null;
 }
 
@@ -35,16 +32,16 @@ export const testConnection = async (maxRetries = 3) => {
 
       const result = await sql`SELECT 1 as test`;
       isConnected = true;
-      console.log("✅ Yuno App - Database connection test successful");
+      console.log("✅ Database connection test successful");
       return { connected: true, result: result[0] };
     } catch (error) {
       console.error(
-        `❌ Yuno App - Database connection test failed (attempt ${attempt}/${maxRetries}):`,
+        `❌ Database connection test failed (attempt ${attempt}/${maxRetries}):`,
         error.message
       );
 
       if (attempt < maxRetries) {
-        console.log(`🔄 Yuno App - Retrying in 3 seconds...`);
+        console.log(`🔄 Retrying in 3 seconds...`);
         await new Promise((resolve) => setTimeout(resolve, 3000));
         continue;
       }
@@ -67,12 +64,12 @@ export const sqlWithRetry = async (query, params = [], maxRetries = 2) => {
       return result;
     } catch (error) {
       console.error(
-        `❌ Yuno App - Database query failed (attempt ${attempt}/${maxRetries}):`,
+        `❌ Database query failed (attempt ${attempt}/${maxRetries}):`,
         error.message
       );
 
       if (attempt < maxRetries) {
-        console.log(`🔄 Yuno App - Retrying query in 2 seconds...`);
+        console.log(`🔄 Retrying query in 2 seconds...`);
         await new Promise((resolve) => setTimeout(resolve, 2000));
         continue;
       }
@@ -90,9 +87,7 @@ export async function initDB() {
     // Test connection first
     const connectionTest = await testConnection();
     if (!connectionTest.connected) {
-      throw new Error(
-        `Yuno App - Database connection failed: ${connectionTest.error}`
-      );
+      throw new Error(`Database connection failed: ${connectionTest.error}`);
     }
 
     // Create tables...
@@ -153,26 +148,23 @@ export async function initDB() {
             )
         `;
 
-    // Create 5-month subscription plan (150 days)
+    // Create default premium plan
     await sql`
             INSERT INTO subscription_plans (name, description, price, duration_days, features, is_active)
             VALUES (
-                '5-Month Premium',
-                'Full access to all premium features for 5 months. One-time payment, no automatic renewal.',
-                500.00,
-                150,
-                '["All Premium Features", "5 Months Access", "One-Time Payment", "No Automatic Renewal"]'::jsonb,
+                'Premium Plan',
+                'Unlock all premium features including advanced analytics, unlimited products, and priority support',
+                200.00,
+                30,
+                '["Advanced Analytics", "Unlimited Products", "Priority Support", "Data Export", "Custom Reports"]'::jsonb,
                 true
             ) ON CONFLICT DO NOTHING
         `;
 
-    console.log("✅ Yuno App - Database tables created successfully");
-    return {
-      success: true,
-      message: "Yuno App database initialized successfully",
-    };
+    console.log("✅ Database tables created successfully");
+    return { success: true, message: "Database initialized successfully" };
   } catch (error) {
-    console.error("❌ Yuno App - Error initializing database:", error);
+    console.error("❌ Error initializing database:", error);
     throw error;
   }
 }

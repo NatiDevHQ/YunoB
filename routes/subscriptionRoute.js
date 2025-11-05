@@ -12,31 +12,11 @@ router.get("/plans", async (req, res) => {
       WHERE is_active = true 
       ORDER BY price ASC
     `;
-    res.json({
-      service: "Yuno App Subscription API",
-      plans,
-    });
+    res.json(plans);
   } catch (error) {
     console.error("Error fetching subscription plans:", error);
-    res.status(500).json({
-      error: "Failed to fetch subscription plans",
-      service: "Yuno App Subscription API",
-    });
+    res.status(500).json({ error: "Failed to fetch subscription plans" });
   }
-});
-
-// Health check
-router.get("/health", (req, res) => {
-  res.json({
-    status: "healthy",
-    service: "Yuno App Subscription API",
-    timestamp: new Date().toISOString(),
-    features: {
-      subscription_management: true,
-      trial_system: true,
-      payment_processing: true,
-    },
-  });
 });
 
 // Protected routes
@@ -50,17 +30,12 @@ router.get("/onboarding-status", async (req, res) => {
 
     const [existingTrial, existingSubscription] = await Promise.all([
       sql`SELECT * FROM user_trials WHERE user_id = ${user_id} LIMIT 1`,
-      sql`SELECT * FROM user_subscriptions WHERE user_id = ${user_id} AND status = 'active' AND end_date > CURRENT_TIMESTAMP LIMIT 1`,
+      sql`SELECT * FROM user_subscriptions WHERE user_id = ${user_id} AND status = 'active' LIMIT 1`,
     ]);
 
-    // User has active 5-month subscription = PRO user
+    // User has active subscription
     if (existingSubscription.length > 0) {
-      return res.json({
-        show_welcome: false,
-        has_subscription: true,
-        isPro: true,
-        service: "Yuno App Subscription API",
-      });
+      return res.json({ show_welcome: false, has_subscription: true });
     }
 
     // User has used trial before
@@ -74,17 +49,13 @@ router.get("/onboarding-status", async (req, res) => {
           show_welcome: false,
           has_trial: true,
           trial_active: true,
-          isPro: false,
           trial_end_date: trial.trial_end_date,
-          service: "Yuno App Subscription API",
         });
       }
       return res.json({
         show_welcome: false,
         has_trial: true,
         trial_active: false,
-        isPro: false,
-        service: "Yuno App Subscription API",
       });
     }
 
@@ -93,15 +64,10 @@ router.get("/onboarding-status", async (req, res) => {
       show_welcome: true,
       has_trial: false,
       has_subscription: false,
-      isPro: false,
-      service: "Yuno App Subscription API",
     });
   } catch (error) {
     console.error("Error checking onboarding status:", error);
-    res.status(500).json({
-      error: "Failed to check onboarding status",
-      service: "Yuno App Subscription API",
-    });
+    res.status(500).json({ error: "Failed to check onboarding status" });
   }
 });
 
@@ -115,10 +81,7 @@ router.post("/start-trial", async (req, res) => {
     `;
 
     if (existingTrial.length > 0) {
-      return res.status(400).json({
-        error: "Trial already used",
-        service: "Yuno App Subscription API",
-      });
+      return res.status(400).json({ error: "Trial already used" });
     }
 
     const trialStart = new Date();
@@ -135,19 +98,14 @@ router.post("/start-trial", async (req, res) => {
       message: "7-day free trial started!",
       trial: trial[0],
       trial_end_date: trialEnd,
-      isPro: false,
-      service: "Yuno App Subscription API",
     });
   } catch (error) {
     console.error("Error starting trial:", error);
-    res.status(500).json({
-      error: "Failed to start trial: " + error.message,
-      service: "Yuno App Subscription API",
-    });
+    res.status(500).json({ error: "Failed to start trial: " + error.message });
   }
 });
 
-// Skip trial and go to premium selection
+// Skip trial and go to premium selection - FIXED VERSION
 router.post("/skip-trial", async (req, res) => {
   try {
     const { user_id } = req;
@@ -158,7 +116,7 @@ router.post("/skip-trial", async (req, res) => {
     `;
 
     const trialStart = new Date();
-    const trialEnd = new Date();
+    const trialEnd = new Date(); // Set to current date since they skipped trial
 
     if (existingTrial.length > 0) {
       // Update existing trial to inactive with proper dates
@@ -178,15 +136,10 @@ router.post("/skip-trial", async (req, res) => {
     res.json({
       message: "Trial skipped successfully",
       trial_skipped: true,
-      isPro: false,
-      service: "Yuno App Subscription API",
     });
   } catch (error) {
     console.error("Error skipping trial:", error);
-    res.status(500).json({
-      error: "Failed to skip trial: " + error.message,
-      service: "Yuno App Subscription API",
-    });
+    res.status(500).json({ error: "Failed to skip trial: " + error.message });
   }
 });
 
@@ -216,29 +169,6 @@ router.get("/my-subscription", async (req, res) => {
       `,
     ]);
 
-    // User has active 5-month subscription = PRO user
-    if (
-      subscription.length > 0 &&
-      subscription[0].subscription_status === "active"
-    ) {
-      const sub = subscription[0];
-      const daysLeft = Math.ceil(
-        (new Date(sub.end_date) - new Date()) / (1000 * 60 * 60 * 24)
-      );
-      const monthsLeft = Math.ceil(daysLeft / 30);
-
-      return res.json({
-        ...sub,
-        days_remaining: daysLeft,
-        months_remaining: monthsLeft,
-        isPro: true,
-        status: "pro",
-        message: `5-month subscription active - ${monthsLeft} months remaining`,
-        service: "Yuno App Subscription API",
-      });
-    }
-
-    // User has active trial = NOT PRO (still needs to upgrade)
     if (activeTrial.length > 0) {
       const trial = activeTrial[0];
       const trialEnd = new Date(trial.trial_end_date);
@@ -251,10 +181,26 @@ router.get("/my-subscription", async (req, res) => {
         trial_end_date: trial.trial_end_date,
         trial_days_left: daysLeft,
         is_trial_active: true,
-        isPro: false,
         trial_duration: 7,
         message: `7-day free trial active - ${daysLeft} days left`,
-        service: "Yuno App Subscription API",
+      });
+    }
+
+    if (subscription.length > 0) {
+      const sub = subscription[0];
+      const isActive = sub.subscription_status === "active";
+      const daysLeft = isActive
+        ? Math.ceil(
+            (new Date(sub.end_date) - new Date()) / (1000 * 60 * 60 * 24)
+          )
+        : 0;
+
+      return res.json({
+        ...sub,
+        days_remaining: daysLeft,
+        message: isActive
+          ? `Premium active - ${daysLeft} days remaining`
+          : "Subscription expired",
       });
     }
 
@@ -263,40 +209,22 @@ router.get("/my-subscription", async (req, res) => {
       SELECT * FROM user_trials WHERE user_id = ${user_id} LIMIT 1
     `;
 
-    // Check if user had subscription that expired
-    const expiredSubscription = await sql`
-      SELECT * FROM user_subscriptions 
-      WHERE user_id = ${user_id} AND end_date <= CURRENT_TIMESTAMP
-      ORDER BY end_date DESC LIMIT 1
-    `;
-
-    let message = "No active subscription";
-    if (usedTrial.length > 0) {
-      message = "Free trial used. Purchase 5-month subscription.";
-    } else if (expiredSubscription.length > 0) {
-      message = "5-month subscription expired. Purchase again.";
-    }
-
-    // No subscription, no active trial = NOT PRO
     res.json({
       status: "inactive",
       is_trial_available: usedTrial.length === 0,
       is_trial_used: usedTrial.length > 0,
-      had_subscription: expiredSubscription.length > 0,
-      isPro: false,
-      message: message,
-      service: "Yuno App Subscription API",
+      message:
+        usedTrial.length > 0
+          ? "Free trial used. Upgrade to premium."
+          : "No active subscription",
     });
   } catch (error) {
     console.error("Error fetching subscription:", error);
-    res.status(500).json({
-      error: "Failed to fetch subscription",
-      service: "Yuno App Subscription API",
-    });
+    res.status(500).json({ error: "Failed to fetch subscription" });
   }
 });
 
-// Submit payment for 5-month subscription
+// Submit payment for subscription - FIXED VERSION
 router.post("/submit-payment", async (req, res) => {
   try {
     const { user_id } = req;
@@ -313,7 +241,6 @@ router.post("/submit-payment", async (req, res) => {
       return res.status(400).json({
         error:
           "Missing required fields: plan_id, amount, payment_method, transaction_code",
-        service: "Yuno App Subscription API",
       });
     }
 
@@ -322,10 +249,7 @@ router.post("/submit-payment", async (req, res) => {
     `;
 
     if (plan.length === 0) {
-      return res.status(404).json({
-        error: "Subscription plan not found",
-        service: "Yuno App Subscription API",
-      });
+      return res.status(404).json({ error: "Subscription plan not found" });
     }
 
     // Convert to numbers for comparison
@@ -335,7 +259,6 @@ router.post("/submit-payment", async (req, res) => {
     if (submittedAmount !== planPrice) {
       return res.status(400).json({
         error: `Amount must be exactly ${planPrice} for this plan`,
-        service: "Yuno App Subscription API",
       });
     }
 
@@ -351,7 +274,7 @@ router.post("/submit-payment", async (req, res) => {
       RETURNING *
     `;
 
-    // Mark trial as used when user purchases subscription
+    // Mark trial as used when user subscribes - FIXED VERSION
     const trialStart = new Date();
     const trialEnd = new Date();
 
@@ -367,15 +290,12 @@ router.post("/submit-payment", async (req, res) => {
     res.status(201).json({
       message: "Payment submitted successfully. Waiting for admin approval.",
       payment: payment[0],
-      isPro: false, // Still not Pro until admin approves
-      service: "Yuno App Subscription API",
     });
   } catch (error) {
     console.error("Error submitting payment:", error);
-    res.status(500).json({
-      error: "Failed to submit payment: " + error.message,
-      service: "Yuno App Subscription API",
-    });
+    res
+      .status(500)
+      .json({ error: "Failed to submit payment: " + error.message });
   }
 });
 
@@ -392,16 +312,10 @@ router.get("/payment-history", async (req, res) => {
       ORDER BY ps.submitted_at DESC
     `;
 
-    res.json({
-      payments,
-      service: "Yuno App Subscription API",
-    });
+    res.json(payments);
   } catch (error) {
     console.error("Error fetching payment history:", error);
-    res.status(500).json({
-      error: "Failed to fetch payment history",
-      service: "Yuno App Subscription API",
-    });
+    res.status(500).json({ error: "Failed to fetch payment history" });
   }
 });
 

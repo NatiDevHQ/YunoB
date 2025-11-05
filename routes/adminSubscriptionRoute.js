@@ -9,10 +9,7 @@ const router = express.Router();
 const requireAdmin = (req, res, next) => {
   const adminToken = req.headers["admin-token"];
   if (!adminToken || adminToken !== process.env.ADMIN_TOKEN) {
-    return res.status(401).json({
-      error: "Admin access required",
-      service: "Yuno App Admin API",
-    });
+    return res.status(401).json({ error: "Admin access required" });
   }
   next();
 };
@@ -85,21 +82,21 @@ router.post("/setup-database", async (req, res) => {
       )
     `;
 
-    // Create 5-month subscription plan (150 days)
+    // Create default premium plan
     await sql`
       INSERT INTO subscription_plans (name, description, price, duration_days, features, is_active)
       VALUES (
-        '5-Month Premium',
-        'Full access to all premium features for 5 months. One-time payment, no automatic renewal.',
-        500.00,
-        150,
-        '["All Premium Features", "5 Months Access", "One-Time Payment", "No Automatic Renewal"]'::jsonb,
+        'Premium Plan',
+        'Unlock all premium features including advanced analytics, unlimited products, and priority support',
+        200.00,
+        30,
+        '["Advanced Analytics", "Unlimited Products", "Priority Support", "Data Export", "Custom Reports"]'::jsonb,
         true
       ) ON CONFLICT DO NOTHING
     `;
 
     res.json({
-      message: "Yuno App database tables created successfully",
+      message: "Database tables created successfully",
       tables: [
         "user_trials",
         "payment_submissions",
@@ -108,11 +105,8 @@ router.post("/setup-database", async (req, res) => {
       ],
     });
   } catch (error) {
-    console.error("Error setting up Yuno App database:", error);
-    res.status(500).json({
-      error: "Failed to setup database",
-      service: "Yuno App Admin API",
-    });
+    console.error("Error setting up database:", error);
+    res.status(500).json({ error: "Failed to setup database" });
   }
 });
 
@@ -133,14 +127,11 @@ router.get("/pending-payments", async (req, res) => {
     res.json(payments);
   } catch (error) {
     console.error("Error fetching pending payments:", error);
-    res.status(500).json({
-      error: "Failed to fetch pending payments",
-      service: "Yuno App Admin API",
-    });
+    res.status(500).json({ error: "Failed to fetch pending payments" });
   }
 });
 
-// Approve payment and activate 5-month subscription
+// Approve payment and activate subscription
 router.post("/approve-payment/:paymentId", async (req, res) => {
   try {
     const { paymentId } = req.params;
@@ -152,17 +143,14 @@ router.post("/approve-payment/:paymentId", async (req, res) => {
     `;
 
     if (payment.length === 0)
-      return res.status(404).json({
-        error: "Pending payment not found",
-        service: "Yuno App Admin API",
-      });
+      return res.status(404).json({ error: "Pending payment not found" });
 
     const paymentData = payment[0];
     const plan = await sql`
       SELECT duration_days FROM subscription_plans 
       WHERE id = ${paymentData.plan_id}
     `;
-    const durationDays = plan[0]?.duration_days || 150; // Default to 5 months
+    const durationDays = plan[0]?.duration_days || 30;
 
     const endDate = new Date();
     endDate.setDate(endDate.getDate() + durationDays);
@@ -185,7 +173,7 @@ router.post("/approve-payment/:paymentId", async (req, res) => {
       WHERE user_id = ${paymentData.user_id} AND status = 'active'
     `;
 
-    // Create new 5-month subscription
+    // Create new subscription
     await sql`
       INSERT INTO user_subscriptions (
         user_id, plan_id, status, start_date, end_date, days_remaining
@@ -200,22 +188,16 @@ router.post("/approve-payment/:paymentId", async (req, res) => {
     `;
 
     res.json({
-      message:
-        "Payment approved and 5-month subscription activated successfully",
+      message: "Payment approved and subscription activated successfully",
       payment_id: paymentId,
       user_id: paymentData.user_id,
-      start_date: new Date().toISOString(),
-      end_date: endDate.toISOString(),
-      duration_months: 5,
-      isPro: true,
-      service: "Yuno App Admin API",
+      end_date: endDate,
     });
   } catch (error) {
     console.error("Error approving payment:", error);
-    res.status(500).json({
-      error: "Failed to approve payment: " + error.message,
-      service: "Yuno App Admin API",
-    });
+    res
+      .status(500)
+      .json({ error: "Failed to approve payment: " + error.message });
   }
 });
 
@@ -226,10 +208,7 @@ router.post("/reject-payment/:paymentId", async (req, res) => {
     const { rejection_reason } = req.body;
 
     if (!rejection_reason)
-      return res.status(400).json({
-        error: "Rejection reason is required",
-        service: "Yuno App Admin API",
-      });
+      return res.status(400).json({ error: "Rejection reason is required" });
 
     const result = await sql`
       UPDATE payment_submissions 
@@ -243,23 +222,17 @@ router.post("/reject-payment/:paymentId", async (req, res) => {
     `;
 
     if (result.length === 0)
-      return res.status(404).json({
-        error: "Pending payment not found",
-        service: "Yuno App Admin API",
-      });
+      return res.status(404).json({ error: "Pending payment not found" });
 
     res.json({
       message: "Payment rejected successfully",
       payment: result[0],
-      isPro: false,
-      service: "Yuno App Admin API",
     });
   } catch (error) {
     console.error("Error rejecting payment:", error);
-    res.status(500).json({
-      error: "Failed to reject payment: " + error.message,
-      service: "Yuno App Admin API",
-    });
+    res
+      .status(500)
+      .json({ error: "Failed to reject payment: " + error.message });
   }
 });
 
@@ -273,12 +246,7 @@ router.get("/subscriptions", async (req, res) => {
     const subscriptions = await sql`
       SELECT 
         us.*, ps.user_email, ps.user_name,
-        sp.name as plan_name, sp.price,
-        CASE 
-          WHEN us.end_date > CURRENT_TIMESTAMP AND us.status = 'active' THEN true
-          ELSE false
-        END as is_pro,
-        EXTRACT(DAY FROM (us.end_date - CURRENT_TIMESTAMP)) as days_remaining
+        sp.name as plan_name, sp.price
       FROM user_subscriptions us
       LEFT JOIN payment_submissions ps ON us.user_id = ps.user_id AND ps.status = 'approved'
       LEFT JOIN subscription_plans sp ON us.plan_id = sp.id
@@ -287,14 +255,11 @@ router.get("/subscriptions", async (req, res) => {
     res.json(subscriptions);
   } catch (error) {
     console.error("Error fetching subscriptions:", error);
-    res.status(500).json({
-      error: "Failed to fetch subscriptions",
-      service: "Yuno App Admin API",
-    });
+    res.status(500).json({ error: "Failed to fetch subscriptions" });
   }
 });
 
-// Cancel subscription (manual admin action)
+// Cancel subscription
 router.post("/cancel-subscription/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
@@ -307,23 +272,15 @@ router.post("/cancel-subscription/:userId", async (req, res) => {
     `;
 
     if (result.length === 0)
-      return res.status(404).json({
-        error: "Active subscription not found",
-        service: "Yuno App Admin API",
-      });
+      return res.status(404).json({ error: "Active subscription not found" });
 
     res.json({
       message: "Subscription cancelled successfully",
       user_id: userId,
-      isPro: false,
-      service: "Yuno App Admin API",
     });
   } catch (error) {
     console.error("Error cancelling subscription:", error);
-    res.status(500).json({
-      error: "Failed to cancel subscription",
-      service: "Yuno App Admin API",
-    });
+    res.status(500).json({ error: "Failed to cancel subscription" });
   }
 });
 
@@ -337,10 +294,7 @@ router.get("/plans", async (req, res) => {
     res.json(plans);
   } catch (error) {
     console.error("Error fetching subscription plans:", error);
-    res.status(500).json({
-      error: "Failed to fetch subscription plans",
-      service: "Yuno App Admin API",
-    });
+    res.status(500).json({ error: "Failed to fetch subscription plans" });
   }
 });
 
@@ -356,10 +310,9 @@ router.post("/plans", async (req, res) => {
     } = req.body;
 
     if (!name || !price || !duration_days)
-      return res.status(400).json({
-        error: "Missing required fields: name, price, duration_days",
-        service: "Yuno App Admin API",
-      });
+      return res
+        .status(400)
+        .json({ error: "Missing required fields: name, price, duration_days" });
 
     const plan = await sql`
       INSERT INTO subscription_plans (
@@ -374,14 +327,10 @@ router.post("/plans", async (req, res) => {
     res.status(201).json({
       message: "Subscription plan created successfully",
       plan: plan[0],
-      service: "Yuno App Admin API",
     });
   } catch (error) {
     console.error("Error creating subscription plan:", error);
-    res.status(500).json({
-      error: "Failed to create subscription plan",
-      service: "Yuno App Admin API",
-    });
+    res.status(500).json({ error: "Failed to create subscription plan" });
   }
 });
 
@@ -390,34 +339,23 @@ router.post("/plans", async (req, res) => {
 // =======================
 router.get("/dashboard-stats", async (req, res) => {
   try {
-    const [
-      totalRevenue,
-      activeSubscriptions,
-      pendingPayments,
-      recentPayments,
-      expiredSubscriptions,
-    ] = await Promise.all([
-      sql`SELECT COALESCE(SUM(amount), 0) as total FROM payment_submissions WHERE status = 'approved'`,
-      sql`SELECT COUNT(*) as count FROM user_subscriptions WHERE status = 'active' AND end_date > CURRENT_TIMESTAMP`,
-      sql`SELECT COUNT(*) as count FROM payment_submissions WHERE status = 'pending'`,
-      sql`SELECT COUNT(*) as count FROM payment_submissions WHERE submitted_at >= CURRENT_DATE - INTERVAL '7 days'`,
-      sql`SELECT COUNT(*) as count FROM user_subscriptions WHERE end_date <= CURRENT_TIMESTAMP`,
-    ]);
+    const [totalRevenue, activeSubscriptions, pendingPayments, recentPayments] =
+      await Promise.all([
+        sql`SELECT COALESCE(SUM(amount), 0) as total FROM payment_submissions WHERE status = 'approved'`,
+        sql`SELECT COUNT(*) as count FROM user_subscriptions WHERE status = 'active' AND end_date > CURRENT_TIMESTAMP`,
+        sql`SELECT COUNT(*) as count FROM payment_submissions WHERE status = 'pending'`,
+        sql`SELECT COUNT(*) as count FROM payment_submissions WHERE submitted_at >= CURRENT_DATE - INTERVAL '7 days'`,
+      ]);
 
     res.json({
       total_revenue: parseFloat(totalRevenue[0].total) || 0,
       active_subscriptions: parseInt(activeSubscriptions[0].count) || 0,
       pending_payments: parseInt(pendingPayments[0].count) || 0,
       recent_payments: parseInt(recentPayments[0].count) || 0,
-      expired_subscriptions: parseInt(expiredSubscriptions[0].count) || 0,
-      service: "Yuno App Admin API",
     });
   } catch (error) {
     console.error("Error fetching dashboard stats:", error);
-    res.status(500).json({
-      error: "Failed to fetch dashboard stats",
-      service: "Yuno App Admin API",
-    });
+    res.status(500).json({ error: "Failed to fetch dashboard stats" });
   }
 });
 
@@ -429,14 +367,14 @@ router.get("/health", async (req, res) => {
     await sql`SELECT 1`;
     res.json({
       status: "healthy",
-      service: "Yuno App Admin Subscription API",
+      service: "Admin Subscription API",
       timestamp: new Date().toISOString(),
       database: "connected",
     });
   } catch (error) {
     res.status(500).json({
       status: "unhealthy",
-      service: "Yuno App Admin Subscription API",
+      service: "Admin Subscription API",
       timestamp: new Date().toISOString(),
       database: "disconnected",
       error: error.message,
