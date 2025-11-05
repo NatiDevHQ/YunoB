@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ElectroPOS Admin Dashboard</title>
+    <title>Payment Pro Admin Dashboard</title>
     <link
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
       rel="stylesheet"
@@ -126,13 +126,13 @@
       .stat-card.revenue {
         border-left-color: var(--success);
       }
+      .stat-card.pro-users {
+        border-left-color: var(--primary);
+      }
       .stat-card.pending {
         border-left-color: var(--warning);
       }
-      .stat-card.active {
-        border-left-color: var(--primary);
-      }
-      .stat-card.recent {
+      .stat-card.total {
         border-left-color: var(--danger);
       }
 
@@ -205,11 +205,11 @@
         background: #fee2e2;
         color: #991b1b;
       }
-      .badge-active {
-        background: #dbeafe;
-        color: #1e40af;
+      .badge-pro {
+        background: #d1fae5;
+        color: #065f46;
       }
-      .badge-expired {
+      .badge-not-pro {
         background: #f3f4f6;
         color: #6b7280;
       }
@@ -383,6 +383,14 @@
       .modal-header button:hover {
         color: var(--dark);
       }
+
+      .transaction-id {
+        font-family: monospace;
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
     </style>
   </head>
   <body>
@@ -418,7 +426,7 @@
       <!-- Sidebar -->
       <div class="sidebar">
         <div class="sidebar-header">
-          <h2><i class="fas fa-store"></i> ElectroPOS Admin</h2>
+          <h2><i class="fas fa-crown"></i> Payment Pro Admin</h2>
         </div>
         <div class="sidebar-menu">
           <a class="menu-item active" data-tab="dashboard-tab">
@@ -427,8 +435,8 @@
           <a class="menu-item" data-tab="payments-tab">
             <i class="fas fa-money-bill-wave"></i> Pending Payments
           </a>
-          <a class="menu-item" data-tab="subscriptions-tab">
-            <i class="fas fa-users"></i> Subscriptions
+          <a class="menu-item" data-tab="users-tab">
+            <i class="fas fa-users"></i> Pro Users
           </a>
           <a class="menu-item" id="setupDbBtn">
             <i class="fas fa-database"></i> Setup Database
@@ -457,20 +465,20 @@
               </div>
               <div class="stat-desc">All approved payments</div>
             </div>
-            <div class="stat-card active">
-              <div class="stat-title">Active Subscriptions</div>
-              <div class="stat-number" id="activeSubscriptions">0</div>
-              <div class="stat-desc">Currently active users</div>
+            <div class="stat-card pro-users">
+              <div class="stat-title">Pro Users</div>
+              <div class="stat-number" id="proUsers">0</div>
+              <div class="stat-desc">Users with Pro status</div>
             </div>
             <div class="stat-card pending">
               <div class="stat-title">Pending Payments</div>
               <div class="stat-number" id="pendingPayments">0</div>
               <div class="stat-desc">Awaiting approval</div>
             </div>
-            <div class="stat-card recent">
-              <div class="stat-title">Recent Payments (7d)</div>
-              <div class="stat-number" id="recentPayments">0</div>
-              <div class="stat-desc">Last 7 days</div>
+            <div class="stat-card total">
+              <div class="stat-title">Total Payments</div>
+              <div class="stat-number" id="totalPayments">0</div>
+              <div class="stat-desc">All processed payments</div>
             </div>
           </div>
 
@@ -483,17 +491,16 @@
               <table class="table">
                 <thead>
                   <tr>
-                    <th>User</th>
-                    <th>Plan</th>
+                    <th>User ID</th>
                     <th>Amount</th>
-                    <th>Method</th>
+                    <th>Transaction ID</th>
                     <th>Status</th>
                     <th>Date</th>
                   </tr>
                 </thead>
                 <tbody id="recentActivityTable">
                   <tr>
-                    <td colspan="6" class="loading">
+                    <td colspan="5" class="loading">
                       Loading recent activity...
                     </td>
                   </tr>
@@ -518,19 +525,17 @@
               <table class="table">
                 <thead>
                   <tr>
-                    <th>User</th>
+                    <th>User ID</th>
                     <th>Email</th>
-                    <th>Plan</th>
                     <th>Amount</th>
-                    <th>Method</th>
-                    <th>Transaction Code</th>
+                    <th>Transaction ID</th>
                     <th>Submitted</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="pendingPaymentsTable">
                   <tr>
-                    <td colspan="8" class="loading">
+                    <td colspan="6" class="loading">
                       Loading pending payments...
                     </td>
                   </tr>
@@ -540,13 +545,13 @@
           </div>
         </div>
 
-        <!-- Subscriptions Tab -->
-        <div id="subscriptions-tab" class="tab-content" style="display: none">
+        <!-- Pro Users Tab -->
+        <div id="users-tab" class="tab-content" style="display: none">
           <div class="card">
             <div class="card-header">
-              <h3 class="card-title">All Subscriptions</h3>
+              <h3 class="card-title">Pro Users</h3>
               <div>
-                <button class="btn btn-primary" id="refreshSubscriptionsBtn">
+                <button class="btn btn-primary" id="refreshUsersBtn">
                   <i class="fas fa-sync-alt"></i> Refresh
                 </button>
               </div>
@@ -555,21 +560,16 @@
               <table class="table">
                 <thead>
                   <tr>
-                    <th>User</th>
+                    <th>User ID</th>
                     <th>Email</th>
-                    <th>Plan</th>
+                    <th>Name</th>
+                    <th>Pro Since</th>
                     <th>Status</th>
-                    <th>Start Date</th>
-                    <th>End Date</th>
-                    <th>Days Left</th>
-                    <th>Actions</th>
                   </tr>
                 </thead>
-                <tbody id="subscriptionsTable">
+                <tbody id="usersTable">
                   <tr>
-                    <td colspan="8" class="loading">
-                      Loading subscriptions...
-                    </td>
+                    <td colspan="5" class="loading">Loading pro users...</td>
                   </tr>
                 </tbody>
               </table>
@@ -590,15 +590,6 @@
         <div class="modal-body">
           <div id="paymentDetails">
             <!-- Payment details will be filled here -->
-          </div>
-          <div class="form-group">
-            <label class="form-label">Admin Notes</label>
-            <textarea
-              id="adminNotes"
-              class="form-control"
-              rows="3"
-              placeholder="Add any notes about this verification..."
-            ></textarea>
           </div>
         </div>
         <div class="modal-footer">
@@ -642,7 +633,7 @@
       let currentPaymentId = null;
       let adminToken = "";
 
-      // API Base URL
+      // API Base URL - Updated to match our new endpoints
       const API_BASE = window.location.origin + "/api/admin/subscription";
 
       console.log("API Base URL:", API_BASE);
@@ -673,7 +664,7 @@
               // Load tab data
               if (tabId === "dashboard-tab") loadDashboard();
               else if (tabId === "payments-tab") loadPendingPayments();
-              else if (tabId === "subscriptions-tab") loadSubscriptions();
+              else if (tabId === "users-tab") loadProUsers();
             }
           });
         });
@@ -683,8 +674,8 @@
           .getElementById("refreshPaymentsBtn")
           .addEventListener("click", loadPendingPayments);
         document
-          .getElementById("refreshSubscriptionsBtn")
-          .addEventListener("click", loadSubscriptions);
+          .getElementById("refreshUsersBtn")
+          .addEventListener("click", loadProUsers);
 
         // Setup database button
         document
@@ -725,7 +716,7 @@
         console.log("Event listeners initialized successfully");
       }
 
-      // Login Functionality
+      // Login Functionality - Updated to use Authorization header
       document
         .getElementById("loginForm")
         .addEventListener("submit", async function (e) {
@@ -735,10 +726,11 @@
 
           try {
             console.log("Attempting login with token...");
-            // Verify token by making a test request
-            const response = await fetch(`${API_BASE}/dashboard-stats`, {
+            // Verify token by making a test request to stats endpoint
+            const response = await fetch(`${API_BASE}/stats`, {
               headers: {
-                "admin-token": token,
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
               },
             });
 
@@ -792,7 +784,7 @@
         document.getElementById(modalId).style.display = "none";
       }
 
-      // Enhanced API Helper Function
+      // Enhanced API Helper Function - Updated for Clerk auth
       async function apiCall(endpoint, options = {}) {
         try {
           const url = `${API_BASE}${endpoint}`;
@@ -801,7 +793,7 @@
           const config = {
             headers: {
               "Content-Type": "application/json",
-              "admin-token": adminToken,
+              Authorization: `Bearer ${adminToken}`,
               ...options.headers,
             },
             ...options,
@@ -813,7 +805,7 @@
 
           // Add timeout to prevent hanging requests
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+          const timeoutId = setTimeout(() => controller.abort(), 30000);
           config.signal = controller.signal;
 
           const response = await fetch(url, config);
@@ -854,38 +846,40 @@
         }
       }
 
-      // Load Dashboard Data
+      // Load Dashboard Data - Updated for new stats endpoint
       async function loadDashboard() {
         console.log("Loading dashboard data...");
         try {
           const [stats, payments] = await Promise.all([
-            apiCall("/dashboard-stats").catch((error) => {
+            apiCall("/stats").catch((error) => {
               console.error("Error loading stats:", error);
               return {
                 total_revenue: 0,
-                active_subscriptions: 0,
+                pro_users: 0,
                 pending_payments: 0,
-                recent_payments: 0,
+                total_payments: 0,
               };
             }),
-            apiCall("/pending-payments").catch((error) => {
+            apiCall("/payments?status=all").catch((error) => {
               console.error("Error loading payments:", error);
-              return [];
+              return { payments: [] };
             }),
           ]);
 
           // Update stats with fallback values
           document.getElementById("totalRevenue").textContent =
             stats.total_revenue ? stats.total_revenue.toFixed(2) : "0.00";
-          document.getElementById("activeSubscriptions").textContent =
-            stats.active_subscriptions || "0";
+          document.getElementById("proUsers").textContent =
+            stats.pro_users || "0";
           document.getElementById("pendingPayments").textContent =
             stats.pending_payments || "0";
-          document.getElementById("recentPayments").textContent =
-            stats.recent_payments || "0";
+          document.getElementById("totalPayments").textContent =
+            stats.total_payments || "0";
 
           // Update recent activity
-          updateRecentActivityTable(payments.slice(0, 5));
+          updateRecentActivityTable(
+            payments.payments ? payments.payments.slice(0, 5) : []
+          );
         } catch (error) {
           console.error("Error loading dashboard:", error);
           showError(
@@ -900,7 +894,7 @@
 
         if (!payments || payments.length === 0) {
           tbody.innerHTML =
-            '<tr><td colspan="6" style="text-align: center; color: var(--gray);">No recent payments</td></tr>';
+            '<tr><td colspan="5" style="text-align: center; color: var(--gray);">No recent payments</td></tr>';
           return;
         }
 
@@ -908,13 +902,16 @@
           .map(
             (payment) => `
                 <tr>
-                    <td>${payment.user_name || "N/A"}</td>
-                    <td>${payment.plan_name}</td>
+                    <td>${payment.clerk_user_id || "N/A"}</td>
                     <td>ETB ${payment.amount}</td>
-                    <td>${payment.payment_method}</td>
-                    <td><span class="badge badge-pending">Pending</span></td>
+                    <td><span class="transaction-id">${
+                      payment.transaction_id
+                    }</span></td>
+                    <td><span class="badge badge-${payment.status}">${
+              payment.status
+            }</span></td>
                     <td>${new Date(
-                      payment.submitted_at
+                      payment.created_at
                     ).toLocaleDateString()}</td>
                 </tr>
             `
@@ -922,24 +919,23 @@
           .join("");
       }
 
-      // Load Pending Payments with Enhanced Error Handling
+      // Load Pending Payments - Updated for new endpoint
       async function loadPendingPayments() {
         console.log("Loading pending payments...");
         const tbody = document.getElementById("pendingPaymentsTable");
 
         try {
           tbody.innerHTML =
-            '<tr><td colspan="8" class="loading">Loading pending payments...</td></tr>';
+            '<tr><td colspan="6" class="loading">Loading pending payments...</td></tr>';
 
-          const payments = await apiCall("/pending-payments");
-          updatePendingPaymentsTable(payments);
+          const response = await apiCall("/payments/pending");
+          updatePendingPaymentsTable(response.payments || []);
         } catch (error) {
           console.error("Error loading pending payments:", error);
 
           let errorMessage =
             "Failed to load pending payments: " + error.message;
 
-          // Specific handling for different error types
           if (
             error.message.includes("timeout") ||
             error.message.includes("Network error")
@@ -953,7 +949,7 @@
 
           tbody.innerHTML = `
                     <tr>
-                        <td colspan="8" style="text-align: center; padding: 20px;">
+                        <td colspan="6" style="text-align: center; padding: 20px;">
                             <div class="error-message" style="margin-bottom: 15px;">
                                 ${errorMessage}
                             </div>
@@ -971,7 +967,7 @@
 
         if (!payments || payments.length === 0) {
           tbody.innerHTML =
-            '<tr><td colspan="8" style="text-align: center; color: var(--gray);">No pending payments</td></tr>';
+            '<tr><td colspan="6" style="text-align: center; color: var(--gray);">No pending payments</td></tr>';
           return;
         }
 
@@ -979,14 +975,14 @@
           .map(
             (payment) => `
                 <tr>
-                    <td>${payment.user_name || "N/A"}</td>
-                    <td>${payment.user_email}</td>
-                    <td>${payment.plan_name}</td>
+                    <td>${payment.clerk_user_id || "N/A"}</td>
+                    <td>${payment.user_email || "N/A"}</td>
                     <td>ETB ${payment.amount}</td>
-                    <td>${payment.payment_method}</td>
-                    <td><code>${payment.transaction_code}</code></td>
+                    <td><span class="transaction-id">${
+                      payment.transaction_id
+                    }</span></td>
                     <td>${new Date(
-                      payment.submitted_at
+                      payment.created_at
                     ).toLocaleDateString()}</td>
                     <td class="action-buttons">
                         <button class="btn btn-sm btn-primary verify-btn" data-payment-id="${
@@ -1009,35 +1005,34 @@
         });
       }
 
-      // Enhanced Payment Verification
+      // Enhanced Payment Verification - Updated for new data structure
       async function verifyPayment(paymentId) {
         console.log("Verifying payment:", paymentId);
 
         try {
-          const payments = await apiCall("/pending-payments");
+          const response = await apiCall("/payments/pending");
+          const payments = response.payments || [];
           const payment = payments.find((p) => p.id === paymentId);
 
           if (payment) {
             document.getElementById("paymentDetails").innerHTML = `
                         <div style="margin-bottom: 15px;">
-                            <strong>User:</strong> ${
-                              payment.user_name || "N/A"
-                            } (${payment.user_email})<br>
-                            <strong>Plan:</strong> ${payment.plan_name}<br>
-                            <strong>Amount:</strong> ETB ${payment.amount}<br>
-                            <strong>Payment Method:</strong> ${
-                              payment.payment_method
+                            <strong>User ID:</strong> ${
+                              payment.clerk_user_id
                             }<br>
-                            <strong>Transaction Code:</strong> <code>${
-                              payment.transaction_code
-                            }</code><br>
+                            <strong>Email:</strong> ${
+                              payment.user_email || "N/A"
+                            }<br>
+                            <strong>Amount:</strong> ETB ${payment.amount}<br>
+                            <strong>Transaction ID:</strong> <span class="transaction-id">${
+                              payment.transaction_id
+                            }</span><br>
                             <strong>Submitted:</strong> ${new Date(
-                              payment.submitted_at
+                              payment.created_at
                             ).toLocaleString()}
                         </div>
                     `;
             currentPaymentId = paymentId;
-            document.getElementById("adminNotes").value = "";
             openModal("paymentModal");
           } else {
             alert("Payment not found! It may have been already processed.");
@@ -1049,6 +1044,7 @@
         }
       }
 
+      // Approve Payment - Updated for new endpoint
       async function approvePayment() {
         if (!currentPaymentId) {
           alert("No payment selected!");
@@ -1058,13 +1054,14 @@
         console.log("Approving payment:", currentPaymentId);
 
         try {
-          const adminNotes = document.getElementById("adminNotes").value;
-          await apiCall(`/approve-payment/${currentPaymentId}`, {
+          await apiCall(`/payments/${currentPaymentId}/approve`, {
             method: "POST",
-            body: { admin_notes: adminNotes },
+            body: {},
           });
 
-          alert("Payment approved successfully!");
+          alert(
+            "Payment approved successfully! User has been upgraded to Pro."
+          );
           closeModal("paymentModal");
           loadDashboard();
           loadPendingPayments();
@@ -1085,6 +1082,7 @@
         openModal("rejectModal");
       }
 
+      // Reject Payment - Updated for new endpoint
       async function confirmRejection() {
         if (!currentPaymentId) {
           alert("No payment selected!");
@@ -1101,7 +1099,7 @@
         console.log("Rejecting payment:", currentPaymentId);
 
         try {
-          await apiCall(`/reject-payment/${currentPaymentId}`, {
+          await apiCall(`/payments/${currentPaymentId}/reject`, {
             method: "POST",
             body: { rejection_reason: rejectionReason },
           });
@@ -1117,105 +1115,76 @@
         }
       }
 
-      // Load Subscriptions
-      async function loadSubscriptions() {
-        console.log("Loading subscriptions...");
+      // Load Pro Users - New function to load users with pro status
+      async function loadProUsers() {
+        console.log("Loading pro users...");
         try {
-          const subscriptions = await apiCall("/subscriptions");
-          updateSubscriptionsTable(subscriptions);
+          // Get all payments to find pro users
+          const paymentsResponse = await apiCall("/payments?status=approved");
+          const approvedPayments = paymentsResponse.payments || [];
+
+          // Extract unique users from approved payments
+          const proUsersMap = new Map();
+          approvedPayments.forEach((payment) => {
+            if (payment.status === "approved") {
+              proUsersMap.set(payment.clerk_user_id, {
+                clerk_user_id: payment.clerk_user_id,
+                user_email: payment.user_email,
+                user_name: payment.user_name,
+                pro_since: payment.processed_at,
+              });
+            }
+          });
+
+          const proUsers = Array.from(proUsersMap.values());
+          updateProUsersTable(proUsers);
         } catch (error) {
-          console.error("Error loading subscriptions:", error);
-          showError(
-            "subscriptionsTable",
-            "Failed to load subscriptions: " + error.message
-          );
+          console.error("Error loading pro users:", error);
+          showError("usersTable", "Failed to load pro users: " + error.message);
         }
       }
 
-      function updateSubscriptionsTable(subscriptions) {
-        const tbody = document.getElementById("subscriptionsTable");
+      function updateProUsersTable(users) {
+        const tbody = document.getElementById("usersTable");
 
-        if (!subscriptions || subscriptions.length === 0) {
+        if (!users || users.length === 0) {
           tbody.innerHTML =
-            '<tr><td colspan="8" style="text-align: center; color: var(--gray);">No subscriptions found</td></tr>';
+            '<tr><td colspan="5" style="text-align: center; color: var(--gray);">No pro users found</td></tr>';
           return;
         }
 
-        tbody.innerHTML = subscriptions
-          .map((sub) => {
-            const endDate = new Date(sub.end_date);
-            const daysLeft = Math.ceil(
-              (endDate - new Date()) / (1000 * 60 * 60 * 24)
-            );
-            const isActive = daysLeft > 0 && sub.status === "active";
-            const status = isActive ? "active" : "expired";
-
-            return `
-                    <tr>
-                        <td>${sub.user_name || "N/A"}</td>
-                        <td>${sub.user_email}</td>
-                        <td>${sub.plan_name}</td>
-                        <td><span class="badge badge-${status}">${
-              status.charAt(0).toUpperCase() + status.slice(1)
-            }</span></td>
-                        <td>${new Date(
-                          sub.start_date
-                        ).toLocaleDateString()}</td>
-                        <td>${endDate.toLocaleDateString()}</td>
-                        <td>${isActive ? daysLeft : 0}</td>
-                        <td class="action-buttons">
-                            ${
-                              isActive
-                                ? `
-                                <button class="btn btn-sm btn-danger cancel-subscription-btn" data-user-id="${sub.user_id}">
-                                    <i class="fas fa-times"></i> Cancel
-                                </button>
-                            `
-                                : ""
-                            }
-                        </td>
-                    </tr>
-                `;
-          })
+        tbody.innerHTML = users
+          .map(
+            (user) => `
+                <tr>
+                    <td>${user.clerk_user_id}</td>
+                    <td>${user.user_email || "N/A"}</td>
+                    <td>${user.user_name || "N/A"}</td>
+                    <td>${
+                      user.pro_since
+                        ? new Date(user.pro_since).toLocaleDateString()
+                        : "N/A"
+                    }</td>
+                    <td><span class="badge badge-pro">Pro</span></td>
+                </tr>
+            `
+          )
           .join("");
-
-        // Add event listeners to cancel subscription buttons
-        document
-          .querySelectorAll(".cancel-subscription-btn")
-          .forEach((button) => {
-            button.addEventListener("click", function () {
-              const userId = this.getAttribute("data-user-id");
-              cancelSubscription(userId);
-            });
-          });
       }
 
-      async function cancelSubscription(userId) {
-        if (confirm("Are you sure you want to cancel this subscription?")) {
-          console.log("Cancelling subscription for user:", userId);
-          try {
-            await apiCall(`/cancel-subscription/${userId}`, {
-              method: "POST",
-            });
-
-            alert("Subscription cancelled successfully!");
-            loadSubscriptions();
-          } catch (error) {
-            console.error("Error cancelling subscription:", error);
-            alert("Error cancelling subscription: " + error.message);
-          }
-        }
-      }
-
-      // Database Setup
+      // Database Setup - Updated for new endpoint
       async function setupDatabase() {
         if (
           confirm("This will create the necessary database tables. Continue?")
         ) {
           console.log("Setting up database...");
           try {
-            await apiCall("/setup-database", {
+            await fetch(`${window.location.origin}/api/setup-database`, {
               method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ setup_key: "your_setup_key" }),
             });
             alert("Database setup completed successfully!");
             loadDashboard();

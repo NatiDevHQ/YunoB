@@ -9,7 +9,6 @@ router.get("/check", ClerkExpressRequireAuth(), (req, res) => {
     authenticated: true,
     user: {
       id: req.auth.userId,
-      email: req.auth.sessionClaims?.email,
     },
   });
 });

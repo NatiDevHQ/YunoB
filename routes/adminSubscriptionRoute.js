@@ -1,383 +1,282 @@
 import express from "express";
 import { sql } from "../config/db.js";
+import { requireAuth, requireAdmin } from "../middleware/bulletproofAuth.js";
 
 const router = express.Router();
 
-// =======================
-// 🔐 Admin Middleware
-// =======================
-const requireAdmin = (req, res, next) => {
-  const adminToken = req.headers["admin-token"];
-  if (!adminToken || adminToken !== process.env.ADMIN_TOKEN) {
-    return res.status(401).json({ error: "Admin access required" });
-  }
-  next();
-};
-
+// Apply admin middleware to all routes
+router.use(requireAuth);
 router.use(requireAdmin);
 
-// =======================
-// 🗄️ Database Setup Route
-// =======================
-router.post("/setup-database", async (req, res) => {
+/**
+ * 🔧 ADMIN PAYMENT MANAGEMENT
+ *
+ * Features:
+ * - View pending payments
+ * - Approve payments (idempotent)
+ * - Reject payments with reason
+ * - Audit trail with admin IDs
+ */
+
+/**
+ * Get all pending payments for admin review
+ * GET /api/admin/subscription/payments/pending
+ */
+router.get("/payments/pending", async (req, res) => {
   try {
-    // Create user_trials table
-    await sql`
-      CREATE TABLE IF NOT EXISTS user_trials (
-        id SERIAL PRIMARY KEY,
-        user_id TEXT NOT NULL UNIQUE,
-        trial_start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        trial_end_date TIMESTAMP,
-        is_active BOOLEAN DEFAULT true,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
-
-    // Create payment_submissions table
-    await sql`
-      CREATE TABLE IF NOT EXISTS payment_submissions (
-        id SERIAL PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        user_email VARCHAR(255),
-        user_name VARCHAR(255),
-        plan_id INTEGER,
-        amount DECIMAL(10,2) NOT NULL,
-        payment_method VARCHAR(50) NOT NULL,
-        transaction_code VARCHAR(100) NOT NULL,
-        status VARCHAR(20) DEFAULT 'pending',
-        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        verified_at TIMESTAMP,
-        verified_by VARCHAR(100),
-        admin_notes TEXT,
-        rejection_reason TEXT
-      )
-    `;
-
-    // Create user_subscriptions table
-    await sql`
-      CREATE TABLE IF NOT EXISTS user_subscriptions (
-        id SERIAL PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        plan_id INTEGER,
-        status VARCHAR(20) DEFAULT 'active',
-        start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        end_date TIMESTAMP,
-        days_remaining INTEGER,
-        trial_used BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
-
-    // Create subscription_plans table
-    await sql`
-      CREATE TABLE IF NOT EXISTS subscription_plans (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        description TEXT,
-        price DECIMAL(10,2) NOT NULL,
-        duration_days INTEGER NOT NULL,
-        features JSONB,
-        is_active BOOLEAN DEFAULT true,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
-
-    // Create default premium plan
-    await sql`
-      INSERT INTO subscription_plans (name, description, price, duration_days, features, is_active)
-      VALUES (
-        'Premium Plan',
-        'Unlock all premium features including advanced analytics, unlimited products, and priority support',
-        200.00,
-        30,
-        '["Advanced Analytics", "Unlimited Products", "Priority Support", "Data Export", "Custom Reports"]'::jsonb,
-        true
-      ) ON CONFLICT DO NOTHING
+    const payments = await sql`
+      SELECT 
+        p.*,
+        u.email as user_email,
+        u.name as user_name
+      FROM payments p
+      LEFT JOIN users u ON p.clerk_user_id = u.clerk_user_id
+      WHERE p.status = 'pending'
+      ORDER BY p.created_at DESC
     `;
 
     res.json({
-      message: "Database tables created successfully",
-      tables: [
-        "user_trials",
-        "payment_submissions",
-        "user_subscriptions",
-        "subscription_plans",
-      ],
+      payments,
+      count: payments.length,
     });
   } catch (error) {
-    console.error("Error setting up database:", error);
-    res.status(500).json({ error: "Failed to setup database" });
+    console.error("❌ Get pending payments error:", error);
+    res.status(500).json({
+      error: "Failed to get pending payments",
+      message: error.message,
+    });
   }
 });
 
-// =======================
-// 💳 Payment Management
-// =======================
-
-// Get all pending payments
-router.get("/pending-payments", async (req, res) => {
-  try {
-    const payments = await sql`
-      SELECT ps.*, sp.name as plan_name, sp.duration_days
-      FROM payment_submissions ps
-      LEFT JOIN subscription_plans sp ON ps.plan_id = sp.id
-      WHERE ps.status = 'pending'
-      ORDER BY ps.submitted_at DESC
-    `;
-    res.json(payments);
-  } catch (error) {
-    console.error("Error fetching pending payments:", error);
-    res.status(500).json({ error: "Failed to fetch pending payments" });
-  }
-});
-
-// Approve payment and activate subscription
-router.post("/approve-payment/:paymentId", async (req, res) => {
+/**
+ * Approve a payment (idempotent)
+ * POST /api/admin/subscription/payments/:paymentId/approve
+ */
+router.post("/payments/:paymentId/approve", async (req, res) => {
   try {
     const { paymentId } = req.params;
-    const { admin_notes } = req.body;
+    const { admin_id } = req;
 
     const payment = await sql`
-      SELECT * FROM payment_submissions 
-      WHERE id = ${paymentId} AND status = 'pending'
+      SELECT * FROM payments 
+      WHERE id = ${paymentId} 
+      FOR UPDATE
     `;
 
-    if (payment.length === 0)
-      return res.status(404).json({ error: "Pending payment not found" });
+    if (payment.length === 0) {
+      return res.status(404).json({
+        error: "Payment not found",
+        message: `Payment with ID ${paymentId} does not exist`,
+      });
+    }
 
     const paymentData = payment[0];
-    const plan = await sql`
-      SELECT duration_days FROM subscription_plans 
-      WHERE id = ${paymentData.plan_id}
-    `;
-    const durationDays = plan[0]?.duration_days || 30;
 
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + durationDays);
+    // Idempotency check
+    if (paymentData.status === "approved") {
+      return res.json({
+        success: true,
+        message: "Payment already approved",
+        payment_id: paymentId,
+        user_id: paymentData.clerk_user_id,
+      });
+    }
+
+    if (paymentData.status !== "pending") {
+      return res.status(400).json({
+        error: "Invalid payment status",
+        message: `Cannot approve payment with status: ${paymentData.status}`,
+      });
+    }
 
     // Update payment status
     await sql`
-      UPDATE payment_submissions 
+      UPDATE payments 
       SET 
         status = 'approved',
-        verified_at = CURRENT_TIMESTAMP,
-        verified_by = 'admin',
-        admin_notes = ${admin_notes || ""}
+        admin_id = ${admin_id},
+        processed_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ${paymentId}
     `;
 
-    // Deactivate any existing subscription
+    // Create or update user with pro status
     await sql`
-      UPDATE user_subscriptions 
-      SET status = 'inactive'
-      WHERE user_id = ${paymentData.user_id} AND status = 'active'
+      INSERT INTO users (clerk_user_id, is_pro, pro_since, created_at)
+      VALUES (${paymentData.clerk_user_id}, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT (clerk_user_id) 
+      DO UPDATE SET 
+        is_pro = true,
+        pro_since = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
     `;
 
-    // Create new subscription
-    await sql`
-      INSERT INTO user_subscriptions (
-        user_id, plan_id, status, start_date, end_date, days_remaining
-      ) VALUES (
-        ${paymentData.user_id}, 
-        ${paymentData.plan_id}, 
-        'active',
-        CURRENT_TIMESTAMP,
-        ${endDate.toISOString()},
-        ${durationDays}
-      )
-    `;
+    console.log(`✅ Payment ${paymentId} approved by admin ${admin_id}`);
+    console.log(`🎉 User ${paymentData.clerk_user_id} upgraded to Pro`);
 
     res.json({
-      message: "Payment approved and subscription activated successfully",
+      success: true,
+      message: "Payment approved and user upgraded to Pro",
       payment_id: paymentId,
-      user_id: paymentData.user_id,
-      end_date: endDate,
+      user_id: paymentData.clerk_user_id,
+      approved_by: admin_id,
     });
   } catch (error) {
-    console.error("Error approving payment:", error);
-    res
-      .status(500)
-      .json({ error: "Failed to approve payment: " + error.message });
+    console.error("❌ Payment approval error:", error);
+    res.status(500).json({
+      error: "Failed to approve payment",
+      message: error.message,
+    });
   }
 });
 
-// Reject payment
-router.post("/reject-payment/:paymentId", async (req, res) => {
+/**
+ * Reject a payment
+ * POST /api/admin/subscription/payments/:paymentId/reject
+ */
+router.post("/payments/:paymentId/reject", async (req, res) => {
   try {
     const { paymentId } = req.params;
+    const { admin_id } = req;
     const { rejection_reason } = req.body;
 
-    if (!rejection_reason)
-      return res.status(400).json({ error: "Rejection reason is required" });
+    if (!rejection_reason) {
+      return res.status(400).json({
+        error: "Rejection reason required",
+        message: "Please provide a reason for rejection",
+      });
+    }
 
-    const result = await sql`
-      UPDATE payment_submissions 
+    const payment = await sql`
+      SELECT * FROM payments 
+      WHERE id = ${paymentId} 
+      FOR UPDATE
+    `;
+
+    if (payment.length === 0) {
+      return res.status(404).json({
+        error: "Payment not found",
+        message: `Payment with ID ${paymentId} does not exist`,
+      });
+    }
+
+    const paymentData = payment[0];
+
+    // Idempotency check
+    if (paymentData.status === "rejected") {
+      return res.json({
+        success: true,
+        message: "Payment already rejected",
+        payment_id: paymentId,
+      });
+    }
+
+    if (paymentData.status !== "pending") {
+      return res.status(400).json({
+        error: "Invalid payment status",
+        message: `Cannot reject payment with status: ${paymentData.status}`,
+      });
+    }
+
+    // Update payment status
+    await sql`
+      UPDATE payments 
       SET 
         status = 'rejected',
+        admin_id = ${admin_id},
         rejection_reason = ${rejection_reason},
-        verified_at = CURRENT_TIMESTAMP,
-        verified_by = 'admin'
-      WHERE id = ${paymentId} AND status = 'pending'
-      RETURNING *
+        processed_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${paymentId}
     `;
 
-    if (result.length === 0)
-      return res.status(404).json({ error: "Pending payment not found" });
+    console.log(`❌ Payment ${paymentId} rejected by admin ${admin_id}`);
 
     res.json({
+      success: true,
       message: "Payment rejected successfully",
-      payment: result[0],
+      payment_id: paymentId,
+      rejected_by: admin_id,
+      rejection_reason: rejection_reason,
     });
   } catch (error) {
-    console.error("Error rejecting payment:", error);
-    res
-      .status(500)
-      .json({ error: "Failed to reject payment: " + error.message });
+    console.error("❌ Payment rejection error:", error);
+    res.status(500).json({
+      error: "Failed to reject payment",
+      message: error.message,
+    });
   }
 });
 
-// =======================
-// 📦 Subscription Management
-// =======================
-
-// Get all subscriptions
-router.get("/subscriptions", async (req, res) => {
+/**
+ * Get all payments with filtering
+ * GET /api/admin/subscription/payments
+ */
+router.get("/payments", async (req, res) => {
   try {
-    const subscriptions = await sql`
+    const { status, user_id } = req.query;
+
+    let query = sql`
       SELECT 
-        us.*, ps.user_email, ps.user_name,
-        sp.name as plan_name, sp.price
-      FROM user_subscriptions us
-      LEFT JOIN payment_submissions ps ON us.user_id = ps.user_id AND ps.status = 'approved'
-      LEFT JOIN subscription_plans sp ON us.plan_id = sp.id
-      ORDER BY us.created_at DESC
-    `;
-    res.json(subscriptions);
-  } catch (error) {
-    console.error("Error fetching subscriptions:", error);
-    res.status(500).json({ error: "Failed to fetch subscriptions" });
-  }
-});
-
-// Cancel subscription
-router.post("/cancel-subscription/:userId", async (req, res) => {
-  try {
-    const { userId } = req.params;
-
-    const result = await sql`
-      UPDATE user_subscriptions 
-      SET status = 'cancelled', end_date = CURRENT_TIMESTAMP 
-      WHERE user_id = ${userId} AND status = 'active'
-      RETURNING *
+        p.*,
+        u.email as user_email,
+        u.name as user_name,
+        u.is_pro
+      FROM payments p
+      LEFT JOIN users u ON p.clerk_user_id = u.clerk_user_id
+      WHERE 1=1
     `;
 
-    if (result.length === 0)
-      return res.status(404).json({ error: "Active subscription not found" });
+    if (status && status !== "all") {
+      query = query.append(sql` AND p.status = ${status}`);
+    }
+
+    if (user_id) {
+      query = query.append(sql` AND p.clerk_user_id = ${user_id}`);
+    }
+
+    query = query.append(sql` ORDER BY p.created_at DESC`);
+
+    const payments = await query;
 
     res.json({
-      message: "Subscription cancelled successfully",
-      user_id: userId,
+      payments,
+      count: payments.length,
     });
   } catch (error) {
-    console.error("Error cancelling subscription:", error);
-    res.status(500).json({ error: "Failed to cancel subscription" });
-  }
-});
-
-// =======================
-// 🪙 Subscription Plans
-// =======================
-router.get("/plans", async (req, res) => {
-  try {
-    const plans =
-      await sql`SELECT * FROM subscription_plans ORDER BY price ASC`;
-    res.json(plans);
-  } catch (error) {
-    console.error("Error fetching subscription plans:", error);
-    res.status(500).json({ error: "Failed to fetch subscription plans" });
-  }
-});
-
-router.post("/plans", async (req, res) => {
-  try {
-    const {
-      name,
-      description,
-      price,
-      duration_days,
-      features,
-      is_active = true,
-    } = req.body;
-
-    if (!name || !price || !duration_days)
-      return res
-        .status(400)
-        .json({ error: "Missing required fields: name, price, duration_days" });
-
-    const plan = await sql`
-      INSERT INTO subscription_plans (
-        name, description, price, duration_days, features, is_active
-      ) VALUES (
-        ${name}, ${description}, ${price}, ${duration_days}, ${JSON.stringify(
-      features || []
-    )}, ${is_active}
-      ) RETURNING *
-    `;
-
-    res.status(201).json({
-      message: "Subscription plan created successfully",
-      plan: plan[0],
+    console.error("❌ Get payments error:", error);
+    res.status(500).json({
+      error: "Failed to get payments",
+      message: error.message,
     });
-  } catch (error) {
-    console.error("Error creating subscription plan:", error);
-    res.status(500).json({ error: "Failed to create subscription plan" });
   }
 });
 
-// =======================
-// 📊 Dashboard Stats
-// =======================
-router.get("/dashboard-stats", async (req, res) => {
+/**
+ * Get admin dashboard stats
+ * GET /api/admin/subscription/stats
+ */
+router.get("/stats", async (req, res) => {
   try {
-    const [totalRevenue, activeSubscriptions, pendingPayments, recentPayments] =
+    const [totalRevenue, proUsers, pendingPayments, totalPayments] =
       await Promise.all([
-        sql`SELECT COALESCE(SUM(amount), 0) as total FROM payment_submissions WHERE status = 'approved'`,
-        sql`SELECT COUNT(*) as count FROM user_subscriptions WHERE status = 'active' AND end_date > CURRENT_TIMESTAMP`,
-        sql`SELECT COUNT(*) as count FROM payment_submissions WHERE status = 'pending'`,
-        sql`SELECT COUNT(*) as count FROM payment_submissions WHERE submitted_at >= CURRENT_DATE - INTERVAL '7 days'`,
+        sql`SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'approved'`,
+        sql`SELECT COUNT(*) as count FROM users WHERE is_pro = true`,
+        sql`SELECT COUNT(*) as count FROM payments WHERE status = 'pending'`,
+        sql`SELECT COUNT(*) as count FROM payments WHERE status = 'approved'`,
       ]);
 
     res.json({
       total_revenue: parseFloat(totalRevenue[0].total) || 0,
-      active_subscriptions: parseInt(activeSubscriptions[0].count) || 0,
+      pro_users: parseInt(proUsers[0].count) || 0,
       pending_payments: parseInt(pendingPayments[0].count) || 0,
-      recent_payments: parseInt(recentPayments[0].count) || 0,
+      total_payments: parseInt(totalPayments[0].count) || 0,
     });
   } catch (error) {
-    console.error("Error fetching dashboard stats:", error);
-    res.status(500).json({ error: "Failed to fetch dashboard stats" });
-  }
-});
-
-// =======================
-// 🩺 Health Check
-// =======================
-router.get("/health", async (req, res) => {
-  try {
-    await sql`SELECT 1`;
-    res.json({
-      status: "healthy",
-      service: "Admin Subscription API",
-      timestamp: new Date().toISOString(),
-      database: "connected",
-    });
-  } catch (error) {
+    console.error("❌ Get admin stats error:", error);
     res.status(500).json({
-      status: "unhealthy",
-      service: "Admin Subscription API",
-      timestamp: new Date().toISOString(),
-      database: "disconnected",
-      error: error.message,
+      error: "Failed to get admin statistics",
+      message: error.message,
     });
   }
 });
